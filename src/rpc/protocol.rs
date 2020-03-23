@@ -19,7 +19,7 @@ pub type ProtocolId = &'static str;
 /// A wrapper struct for an inbound rpc request and its associated context.
 #[derive(Debug)]
 pub struct InboundRpcRequest {
-    /// Rpc method identifier, e.g., `/libra/rpc/0.1.0/consensus/0.1.0`. This is used
+    /// Rpc method identifier, e.g., `/rpc/0.1.0/get_block/0.1.0`. This is used
     /// to dispatch the request to the corresponding client handler.
     pub protocol: ProtocolId,
     /// The serialized request data received from the sender.
@@ -27,9 +27,9 @@ pub struct InboundRpcRequest {
     /// Channel over which the rpc response is sent from the upper client layer
     /// to the rpc layer.
     ///
-    /// The rpc actor holds onto the receiving end of this channel, awaiting the
+    /// The rpc module holds onto the receiving end of this channel, awaiting the
     /// response from the upper layer. If there is an error in, e.g.,
-    /// deserializing the request, the upper layer should send an [`RpcError`]
+    /// deserializing the request, the upper layer should send an [`anyhow::Error`]
     /// down the channel to signify that there was an error while handling this
     /// rpc request. Currently, we just log these errors and drop the substream;
     /// in the future, we will send an error response to the peer and/or log any
@@ -44,7 +44,7 @@ pub struct InboundRpcRequest {
 /// A wrapper struct for an outbound rpc request and its associated context.
 #[derive(Debug, Clone)]
 pub struct OutboundRpcRequest {
-    /// Rpc method identifier, e.g., `/libra/rpc/0.1.0/consensus/0.1.0`. This is the
+    /// Rpc method identifier, e.g., `/rpc/0.1.0/get_block/0.1.0`. This is the
     /// protocol we will negotiate our outbound substream to.
     pub protocol: ProtocolId,
     /// The serialized request data to be sent to the receiver.
