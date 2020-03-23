@@ -9,11 +9,4 @@ The implementation is a little bit complicating comparing with the origin libra 
 
 ## Usage
 
-See test for more details. A simple showcase is:
-
-```rust
-        let (pubkey, transport) = transport();
-        let mut rpc = Rpc::new(RpcConfig::default());
-        rpc.add_protocol(TEST_PROTOCOL);
-        let swarm = Swarm::new(transport, rpc, pubkey.clone().into_peer_id());
-```
+See test for more details.

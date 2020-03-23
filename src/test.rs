@@ -1,4 +1,4 @@
-use crate::{Rpc, RpcConfig, RpcEvent, RpcNotification};
+use crate::rpc::{handler::RpcNotification, Rpc, RpcConfig, RpcEvent};
 use futures::{pin_mut, prelude::*};
 use libp2p::{
     bytes::Bytes,
