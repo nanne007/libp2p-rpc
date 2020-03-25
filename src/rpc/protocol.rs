@@ -213,11 +213,22 @@ where
                 data: Bytes::from(buf),
                 res_tx,
             };
+
+            // wait notification channel ready
+            if let Err(_) =
+                futures::future::poll_fn(|ctx| self.protocol_event_sender.poll_ready(ctx)).await
+            {
+                error!(target:"libp2p-rpc", "rpc behavior is dropped! This should not happen");
+                return Err(InboundUpgradeError::BehaviourError);
+            }
+
+            // then send the notification
             if let Err(send_err) = self.protocol_event_sender.send(notification).await {
                 if send_err.is_disconnected() {
                     error!(target:"libp2p-rpc", "rpc behavior is dropped! This should not happen");
                     return Err(InboundUpgradeError::BehaviourError);
                 } else if send_err.is_full() {
+                    // if still full, it means the application is overloaded.
                     warn!(target:"libp2p-rpc", "too many concurrent inbound rpc request, maybe you should raise the rpc inbound concurrency limit");
                     return Err(InboundUpgradeError::TooManyInboundRpcRequest);
                 }
@@ -226,6 +237,7 @@ where
             match socket.read(&mut buf).await {
                 Ok(left) => {
                     if left > 0 {
+                        error!(target: "libp2p-rpc", "rpc initiator should half close read");
                         return Err(InboundUpgradeError::UnexpectedRpcRequest);
                     }
                 }
@@ -236,7 +248,17 @@ where
             let resp_data = match futures::future::select(res_rx, Delay::new(self.inbound_timeout))
                 .await
             {
-                futures::future::Either::Left((data, _)) => data??,
+                futures::future::Either::Left((data, _)) => match data {
+                    Err(e) => {
+                        warn!("application layer dropped the response channel");
+                        return Err(e.into());
+                    }
+                    Ok(Err(e)) => {
+                        warn!("application layer handle rpc error, {}", &e);
+                        return Err(e.into());
+                    }
+                    Ok(Ok(d)) => d,
+                },
                 futures::future::Either::Right((_, _)) => {
                     warn!(target: "libp2p-rpc", "application handle inbound rpc request timeouted");
                     return Err(InboundUpgradeError::ApplicationTimedOut);

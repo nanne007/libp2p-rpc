@@ -27,8 +27,13 @@ pub mod protocol;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct RpcConfig {
+    /// The timeout duration for application layer to handle inbound rpc calls.
     pub inbound_rpc_timeout: Duration,
+    /// The maximum number of concurrent outbound rpc requests per peer that we will
+    /// service before back-pressure kicks in.
     pub max_concurrent_outbound_rpcs: u32,
+    /// The maximum number of concurrent inbound rpc requests per peer that we will
+    /// service before back-pressure kicks in.    
     pub max_concurrent_inbound_rpcs: u32,
 }
 
@@ -100,15 +105,11 @@ impl NetworkBehaviour for Rpc {
     type OutEvent = RpcEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        let max_inflight_rpcs = self
-            .config
-            .max_concurrent_inbound_rpcs
-            .checked_next_power_of_two()
-            .expect("config error");
         RpcProtocolHandler::new(
             self.supported_protocols.clone(),
-            max_inflight_rpcs as usize,
             self.config.inbound_rpc_timeout,
+            self.config.max_concurrent_inbound_rpcs,
+            self.config.max_concurrent_outbound_rpcs,
         )
     }
 

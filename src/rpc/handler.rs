@@ -29,6 +29,9 @@ pub enum RpcNotification {
 
 pub struct RpcProtocolHandler {
     inbound_rpc_timeout: Duration,
+    // how many outbound rpc request can send.
+    available_outbound_rpc_nums: u32,
+
     protocol_ids: Vec<ProtocolId>,
     pending_rpc_requests: VecDeque<RpcRequest>,
     pending_rpc_notifications_sender: mpsc::Sender<InboundRpcRequest>,
@@ -38,12 +41,14 @@ pub struct RpcProtocolHandler {
 impl RpcProtocolHandler {
     pub fn new(
         protocol_ids: Vec<ProtocolId>,
-        max_inflight_inbound_rpc_requests: usize,
         inbound_rpc_timeout: Duration,
+        max_concurrent_inbound_rpcs: u32,
+        max_concurrent_outbound_rpcs: u32,
     ) -> Self {
-        let (tx, rx) = mpsc::channel(max_inflight_inbound_rpc_requests);
+        let (tx, rx) = mpsc::channel(max_concurrent_inbound_rpcs as usize);
         Self {
             inbound_rpc_timeout,
+            available_outbound_rpc_nums: max_concurrent_outbound_rpcs,
             protocol_ids,
             pending_rpc_requests: VecDeque::new(),
             pending_rpc_notifications_sender: tx,
@@ -79,6 +84,7 @@ impl ProtocolsHandler for RpcProtocolHandler {
         _protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
+        self.available_outbound_rpc_nums += 1;
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
@@ -90,6 +96,7 @@ impl ProtocolsHandler for RpcProtocolHandler {
         _info: Self::OutboundOpenInfo,
         _error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
+        self.available_outbound_rpc_nums += 1;
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -116,10 +123,14 @@ impl ProtocolsHandler for RpcProtocolHandler {
             Poll::Ready(None) => unreachable!(), // This should not happen, because this always has a sender.
         };
 
+        if self.available_outbound_rpc_nums == 0 {
+            return Poll::Pending;
+        }
         match self.pending_rpc_requests.pop_front() {
             None => Poll::Pending,
             Some(req) => match req {
                 RpcRequest::SendRpc(rpc_request) => {
+                    self.available_outbound_rpc_nums -= 1;
                     let rpc_timeout = rpc_request.timeout;
                     // protocol timeout should be larger to let rpc do it work.
                     let protocol_timeout = rpc_timeout.add(Duration::from_secs(10));
